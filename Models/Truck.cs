@@ -1,12 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using Parking.Models;
 
 namespace Parking
 {
-    internal class Truck
+    internal class Truck : VehicleBase
     {
+        public Truck(string brand, string model) : base(brand, model)
+        {
+            Type = VehicleType.Truck;
+        }
     }
 }

@@ -1,5 +1,19 @@
-﻿namespace Parking
+﻿using Parking.Models;
+
+namespace Parking
 {
+    internal enum IOMessages
+    {
+        InvalidOperation,
+        InvalidArguments,
+        AvailableCommands,
+        NoParkings,
+        ParkingAlreadyExists,
+        ParkingDoesNotExist,
+        ParkingCreated,
+        VehicleParked,
+        NoFreeSpots
+    }
     internal static class IO
     {
         public static void Start()
@@ -8,178 +22,252 @@
             Console.OutputEncoding = System.Text.Encoding.UTF8;
 
             Console.WriteLine("Паркинг мениджър [Версия 1.0.0-alpha]");
-            Console.WriteLine("(i) Петър Николов, КН, 241кнр\n");
+            Console.WriteLine("(c) Петър Николов, КН, 241кнр\n");
 
-            Console.WriteLine("Възможни операции:\n");
-            Console.WriteLine("     * Паркинг <име> <бр. места леки автомобили> <бр. места лекотоварни> <бр. места тежкотоварни>");
-            Console.WriteLine("     * (за нов автомобил) <тип автомобил> <марка> <модел>");
-            Console.WriteLine("     * Печат <име на паркинг>");
-            Console.WriteLine("     * Край\n\n");
+            IO.NotifyUser(IOMessages.AvailableCommands);
         }
 
-        public static Command GetInitialInput()
+        public static void NotifyUser(IOMessages ioMessageType, Parking? selectedParking = null, List<Parking>? allParkings = null, string? parkingName = null)
         {
-            Console.WriteLine("В момента няма налични паркинги. Създайте нов с командата \"Паркинг\"\n");
-
-            Command initialCommand = GetInput();
-
-            if (initialCommand.Target == ActionTarget.End)
+            switch (ioMessageType)
             {
-                Console.WriteLine("Няма създадени паркинги. Изключване...");
-                return initialCommand;
+                case IOMessages.InvalidOperation:
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("Невалидна операция.\n");
+                    Console.ResetColor();
+                    break;
+                case IOMessages.AvailableCommands:
+                    Console.WriteLine("Възможни операции:\n");
+                    Console.WriteLine("     * Паркинг <име> <бр. места леки автомобили> <бр. места лекотоварни> <бр. места тежкотоварни>");
+                    Console.WriteLine("     * (за нов автомобил) <тип автомобил> <марка> <модел>");
+                    Console.WriteLine("     * Печат <име на паркинг>");
+                    Console.WriteLine("     * Помощ");
+                    Console.WriteLine("     * Край\n");
+                    break;
+                case IOMessages.InvalidArguments:
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("Невалидни аргументи.\n");
+                    Console.ResetColor();
+                    break;
+                case IOMessages.NoParkings:
+                    Console.WriteLine("В момента няма налични паркинги. Създайте нов с командата \"Паркинг\"\n");
+                    break;
+                case IOMessages.ParkingCreated when selectedParking != null:
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("------------------------------------------------------");
+                    Console.WriteLine($"Паркинг \"{selectedParking.Name}\" е създаден успешно!");
+                    Console.WriteLine("------------------------------------------------------");
+                    Console.WriteLine("| {0,-15} | {1,-15} | {2,-15} |", "Леки автомобили", "Лекотоварни", "Тежкотоварни");
+                    Console.WriteLine("------------------------------------------------------");
+                    Console.WriteLine("| {0,-15} | {1,-15} | {2,-15} |", selectedParking.TotalSpots.CarSpots, selectedParking.TotalSpots.BusSpots, selectedParking.TotalSpots.TruckSpots);
+                    Console.WriteLine("------------------------------------------------------\n");
+                    Console.ResetColor();
+                    break;
+                case IOMessages.ParkingCreated when selectedParking == null:
+                    throw new ArgumentNullException(nameof(selectedParking), "ERROR: Created parking object is null.");
+                case IOMessages.ParkingAlreadyExists:
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("Паркинг с това име вече съществува.\n");
+                    Console.ResetColor();
+                    break;
+                case IOMessages.ParkingDoesNotExist:
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("Паркинг с това име не съществува.\n");
+                    Console.ResetColor();
+                    break;
+                case IOMessages.VehicleParked when selectedParking != null:
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine($"Превозното средство е паркирано успешно в паркинг \"{selectedParking.Name}\"!\n");
+                    Console.ResetColor();
+                    break;
+                case IOMessages.VehicleParked when selectedParking == null:
+                    throw new ArgumentNullException(nameof(selectedParking), "ERROR: Selected parking object is null.");
+                case IOMessages.NoFreeSpots:
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("Превозното средство не е паркирано. Няма свободни места в паркингите.\n");
+                    Console.ResetColor();
+                    break;
             }
-
-            if (initialCommand.Target != ActionTarget.Parking)
-            {
-                initialCommand.Target = ActionTarget.Invalid;
-            }
-
-            return initialCommand;
         }
 
-        public static Command GetInput()
+        public static Command GetInput(List<Parking>? parkings = null)
         {
+            bool isInitial = parkings == null || parkings.Count < 1;
+            if (isInitial)
+            {
+                IO.NotifyUser(IOMessages.NoParkings);
+            }
+
             Console.Write("> ");
 
-            Command command = new(ActionTarget.Invalid);
+            Command command = new(CommandTargets.Invalid);
 
-            string rawInput = Console.ReadLine();
+            string? rawInput = Console.ReadLine();
+            string[] rawInputArray;
+
             Console.WriteLine("");
-
-            string[] rawInputArr;
 
             if (String.IsNullOrWhiteSpace(rawInput))
             {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("Невалидна операция!\n");
-                Console.ResetColor();
+                IO.NotifyUser(IOMessages.InvalidOperation);
+                IO.NotifyUser(IOMessages.AvailableCommands);
                 return command;
             }
-            else
+
+            rawInputArray = rawInput.Split(' ', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+            if (isInitial && rawInputArray[0].ToLower() != "паркинг")
             {
-                rawInputArr = rawInput.Split(' ', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                return command;
             }
 
-            switch (rawInputArr[0])
+            switch (rawInputArray[0].ToLower())
             {
-                case "Паркинг":
-                    command = ValidateParkingInput(rawInputArr);
+                case "паркинг":
+                    command = ValidateParkingCommand(rawInputArray);
                     break;
-                case "Кола":
-                    command = ValidateParkableInput(rawInputArr, ParkableType.Car);
+                case "кола":
+                    command = ValidateVehicleInput(rawInputArray, VehicleType.Car);
                     break;
-                case "Бус":
-                    command = ValidateParkableInput(rawInputArr, ParkableType.Bus);
+                case "бус":
+                    command = ValidateVehicleInput(rawInputArray, VehicleType.Bus);
                     break;
-                case "Камион":
-                    command = ValidateParkableInput(rawInputArr, ParkableType.Truck);
+                case "камион":
+                    command = ValidateVehicleInput(rawInputArray, VehicleType.Truck);
                     break;
-                case "Печат":
-                    command.Target = ActionTarget.Print;
-                    command.ParkingName = rawInputArr[1];
-                    if (rawInputArr.Length < 2 || rawInputArr.Length > 2)
-                    {
-                        command.Target = ActionTarget.Invalid;
-                    }
+                case "печат":
+                    command = ValidatePrintCommand(rawInputArray, parkings!);
                     break;
-                case "Край":
-                    command.Target = ActionTarget.End;
+                case "край":
+                    command.Target = CommandTargets.End;
+                    break;
+                case "помощ":
+                    IO.NotifyUser(IOMessages.AvailableCommands);
                     break;
                 default:
-                    command.Target = ActionTarget.Invalid;
+                    IO.NotifyUser(IOMessages.InvalidOperation);
+                    IO.NotifyUser(IOMessages.AvailableCommands);
                     break;
-            }
-
-            if (command.Target == ActionTarget.Invalid)
-            {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("Невалидна операция!\n");
-                Console.ResetColor();
             }
 
             return command;
         }
 
-        public static Command ValidateParkingInput(string[] rawInputArr)
+        public static Command ValidateParkingCommand(string[] rawInputArray)
         {
-            Command command = new(ActionTarget.Parking);
+            Command command;
 
-            if (rawInputArr.Length < 5 || rawInputArr.Length > 5)
+            if (rawInputArray.Length < 5 || rawInputArray.Length > 5)
             {
-                return new Command(ActionTarget.Invalid);
+                IO.NotifyUser(IOMessages.InvalidArguments);
+                IO.NotifyUser(IOMessages.AvailableCommands);
+                return new Command(CommandTargets.Invalid);
             }
 
-            bool carSpotsIsValid = int.TryParse(rawInputArr[2], out int carSpots);
-            bool busSpotsIsValid = int.TryParse(rawInputArr[3], out int busSpots);
-            bool truckSpotsIsValid = int.TryParse(rawInputArr[4], out int truckSpots);
+            bool carSpotsIsValid = int.TryParse(rawInputArray[2], out int carSpots);
+            bool busSpotsIsValid = int.TryParse(rawInputArray[3], out int busSpots);
+            bool truckSpotsIsValid = int.TryParse(rawInputArray[4], out int truckSpots);
 
             bool inputIsValid = carSpotsIsValid && busSpotsIsValid && truckSpotsIsValid;
 
             if (inputIsValid)
             {
-                command.ParkingName = rawInputArr[1];
-                command.ParkingSpots = new()
-                {
-                    CarSpots = carSpots,
-                    BusSpots = busSpots,
-                    TruckSpots = truckSpots
-                };
+                command = new(CommandTargets.Parking, rawInputArray[1], new ParkingSpots() { CarSpots = carSpots, BusSpots = busSpots, TruckSpots = truckSpots });
             }
             else
             {
-                return new Command(ActionTarget.Invalid);
+                IO.NotifyUser(IOMessages.InvalidArguments);
+                return new Command(CommandTargets.Invalid);
             }
 
             return command;
         }
 
-        public static Command ValidateParkableInput(string[] rawInputArr, ParkableType parkableType)
+        public static Command ValidateVehicleInput(string[] rawInputArray, VehicleType vehicleType)
         {
-            if (rawInputArr.Length < 3 || rawInputArr.Length > 3)
+            if (rawInputArray.Length < 3 || rawInputArray.Length > 3)
             {
-                return new Command(ActionTarget.Invalid);
+                IO.NotifyUser(IOMessages.InvalidArguments);
+                IO.NotifyUser(IOMessages.AvailableCommands);
+                return new Command(CommandTargets.Invalid);
             }
 
-            Command command = new(ActionTarget.Parkable)
-            {
-                ParkableType = parkableType,
-                ParkableBrand = rawInputArr[1],
-                ParkableModel = rawInputArr[2]
-            };
+            Command command = new(CommandTargets.Vehicle, vehicleType: vehicleType, vehicleBrand: rawInputArray[1], vehicleModel: rawInputArray[2]);
 
             return command;
         }
 
-        public static void NotifyParkingCreated(Parking parking)
+        public static Command ValidatePrintCommand(string[] rawInputArray, List<Parking> parkings)
         {
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine($"Паркинг \"{parking.Name}\" е създаден успешно!");
-            Console.WriteLine("-----------------------------------------------");
-            Console.WriteLine("| {0,-15} | {1,-15} | {2,-15} |", "Леки автомобили", "Лекотоварни", "Тежкотоварни");
-            Console.WriteLine("-----------------------------------------------");
-            Console.WriteLine("| {0,-15} | {1,-15} | {2,-15} |\n", parking.Spots.CarSpots, parking.Spots.BusSpots, parking.Spots.TruckSpots);
-            Console.ResetColor();
+            if (rawInputArray.Length < 2 || rawInputArray.Length > 2)
+            {
+                IO.NotifyUser(IOMessages.InvalidArguments);
+                IO.NotifyUser(IOMessages.AvailableCommands);
+                return new Command(CommandTargets.Invalid);
+            }
+            else if (!Parking.Exists(rawInputArray[1], parkings))
+            {
+                IO.NotifyUser(IOMessages.ParkingDoesNotExist);
+                return new Command(CommandTargets.Invalid);
+            }
+
+            return new Command(CommandTargets.Print, rawInputArray[1]);
+        }
+
+        public static void PrintParking(Parking parking)
+        {
+            List<VehicleBase> sortedVehicles = parking.ParkedVehicles.OrderBy(v => v.Type == VehicleType.Car ? 0 : v.Type == VehicleType.Bus ? 1 : 2).ToList();
+
+            Console.WriteLine("------------------------------------------------------");
+            Console.WriteLine($"Паркинг \"{parking.Name}\" разполага със следните места:");
+            Console.WriteLine("------------------------------------------------------");
+            Console.WriteLine($"{" ",-27}| {"Общо",-10} | {"Заети",-10} |");
+            Console.WriteLine("------------------------------------------------------");
+            Console.WriteLine("| Леки автомобили          | {0, -10} | {1, -10} |", parking.TotalSpots.CarSpots, parking.OccupiedSpots.CarSpots);
+            Console.WriteLine("------------------------------------------------------");
+            Console.WriteLine("| Лекотоварни автомобили   | {0, -10} | {1, -10} |", parking.TotalSpots.BusSpots, parking.OccupiedSpots.BusSpots);
+            Console.WriteLine("------------------------------------------------------");
+            Console.WriteLine("| Тежкотоварни автомобили  | {0, -10} | {1, -10} |", parking.TotalSpots.TruckSpots, parking.OccupiedSpots.TruckSpots);
+            Console.WriteLine("------------------------------------------------------");
+            Console.WriteLine("Aвтомобили в паркинга:");
+            Console.WriteLine("------------------------------------------------------");
+            foreach (VehicleBase vehicle in sortedVehicles)
+            {
+                Console.WriteLine($"| Марка: {vehicle.Brand,-17} | Модел: {vehicle.Model,-16} |");
+                Console.WriteLine("------------------------------------------------------");
+            }
+            Console.WriteLine("");
         }
 
         public static void PrintEndMessage(List<Parking> parkings)
         {
+            if (parkings == null || parkings.Count < 1)
+            {
+                Console.WriteLine("Няма създадени паркинги. Изключване...");
+                return;
+            }
+
+            Console.WriteLine("------------------------------------------------------");
             foreach (Parking parking in parkings)
             {
                 Console.WriteLine($"Паркинг \"{parking.Name}\" разполага със следните места:");
-                Console.WriteLine("-----------------------------------------------");
-                Console.WriteLine("| Леки автомобили          | {0, -10} | {1, -10} |", parking.Spots.CarSpots, parking.Spots.CarOccupied);
-                Console.WriteLine("-----------------------------------------------");
-                Console.WriteLine("| Лекотоварни автомобили   | {0, -10} | {1, -10} |", parking.BusSpots, parking.BusOccupied);
-                Console.WriteLine("-----------------------------------------------");
-                Console.WriteLine("| Тежкотоварни автомобили  | {0, -10} | {1, -10} |\n", parking.TruckSpots, parking.TruckOccupied);
+                Console.WriteLine("------------------------------------------------------");
+                Console.WriteLine($"{" ",-27}| {"Общо",-10} | {"Заети",-10} |");
+                Console.WriteLine("------------------------------------------------------");
+                Console.WriteLine("| Леки автомобили          | {0, -10} | {1, -10} |", parking.TotalSpots.CarSpots, parking.OccupiedSpots.CarSpots);
+                Console.WriteLine("------------------------------------------------------");
+                Console.WriteLine("| Лекотоварни автомобили   | {0, -10} | {1, -10} |", parking.TotalSpots.BusSpots, parking.OccupiedSpots.BusSpots);
+                Console.WriteLine("------------------------------------------------------");
+                Console.WriteLine("| Тежкотоварни автомобили  | {0, -10} | {1, -10} |", parking.TotalSpots.TruckSpots, parking.OccupiedSpots.TruckSpots);
+                Console.WriteLine("------------------------------------------------------");
             }
         }
     }
 
-    internal enum ActionTarget
+    internal enum CommandTargets
     {
         Parking,
-        Parkable,
+        Vehicle,
         Print,
         End,
         Invalid
@@ -187,34 +275,46 @@
 
     internal class Command
     {
-        public ActionTarget Target { get; set; }
+        public CommandTargets Target { get; set; }
         public string? ParkingName { get; set; } = null;
         public ParkingSpots? ParkingSpots { get; set; } = null;
-        public ParkableType? ParkableType { get; set; } = null;
-        public string? ParkableBrand { get; set; } = null;
-        public string? ParkableModel { get; set; } = null;
+        public VehicleType? VehicleType { get; set; } = null;
+        public string? VehicleBrand { get; set; } = null;
+        public string? VehicleModel { get; set; } = null;
 
-        public Command(ActionTarget target, string? parkingName = null, ParkingSpots? parkingSpots = null, ParkableType? parkableType = null, string? parkableBrand = null, string? parkableModel = null)
+        public Command(CommandTargets target, string? parkingName = null, ParkingSpots? parkingSpots = null, VehicleType? vehicleType = null, string? vehicleBrand = null, string? vehicleModel = null)
         {
             this.Target = target;
 
             switch (this.Target)
             {
-                case ActionTarget.Parking:
+                case CommandTargets.Parking:
+                    if (parkingName == null || parkingSpots == null)
+                    {
+                        throw new ArgumentNullException("parkingName, parkingSpots", "Parking name or parking spots are null.");
+                    }
                     this.ParkingName = parkingName;
                     this.ParkingSpots = parkingSpots;
                     break;
-                case ActionTarget.Parkable:
-                    this.ParkableType = parkableType;
-                    this.ParkableBrand = parkableBrand;
-                    this.ParkableModel = parkableModel;
+                case CommandTargets.Vehicle:
+                    if (vehicleType == null || vehicleBrand == null || vehicleModel == null)
+                    {
+                        throw new ArgumentNullException("vehicleType, vehicleBrand, vehicleModel", "Vehicle type, brand or model are null.");
+                    }
+                    this.VehicleType = vehicleType;
+                    this.VehicleBrand = vehicleBrand;
+                    this.VehicleModel = vehicleModel;
                     break;
-                case ActionTarget.Print:
+                case CommandTargets.Print:
+                    if (parkingName == null)
+                    {
+                        throw new ArgumentNullException(nameof(parkingName), "Parking name is null.");
+                    }
                     this.ParkingName = parkingName;
                     break;
-                case ActionTarget.End:
+                case CommandTargets.End:
                     break;
-                case ActionTarget.Invalid:
+                case CommandTargets.Invalid:
                     break;
                 default:
                     throw new ArgumentException("Invalid action target.");

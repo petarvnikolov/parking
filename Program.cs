@@ -1,4 +1,6 @@
-﻿namespace Parking
+﻿using Parking.Models;
+
+namespace Parking
 {
     internal class Program
     {
@@ -10,33 +12,50 @@
 
             IO.Start();
 
-            Command initialCommand;
-
-            do
-            {
-                initialCommand = IO.GetInitialInput();
-
-                if (initialCommand.Target == ActionTarget.End)
-                {
-                    break;
-                }
-                else if (initialCommand.Target == ActionTarget.Parking)
-                {
-                    Parking parking = new(initialCommand.ParkingName, initialCommand.ParkingSpots);
-                    parkings.Add(parking);
-                    IO.NotifyParkingCreated(parking);
-
-                    break;
-                }
-            } while (initialCommand.Target != ActionTarget.Parking);
-
             while (programRunning)
             {
-                Command input = IO.GetInput();
+                Command command = IO.GetInput(parkings);
 
-                if (input.Target == ActionTarget.End)
+                if (command.Target == CommandTargets.Parking)
+                {
+                    Parking? createdParking = Parking.Create(command.ParkingName!, command.ParkingSpots!, parkings);
+
+                    if (createdParking == null)
+                    {
+                        continue;
+                    }
+
+                    parkings.Add(createdParking);
+                }
+
+                if (command.Target == CommandTargets.Vehicle)
+                {
+                    VehicleBase vehicle = VehicleBase.Create(command.VehicleType!, command.VehicleBrand!, command.VehicleModel!);
+
+                    bool vehicleParked = vehicle.Park(parkings);
+
+                    if (!vehicleParked)
+                    {
+                        continue;
+                    }
+                }
+
+                if (command.Target == CommandTargets.Print)
+                {
+                    Parking? parking = Parking.Get(command.ParkingName!, parkings);
+
+                    if (parking == null)
+                    {
+                        continue;
+                    }
+
+                    IO.PrintParking(parking);
+                }
+
+                if (command.Target == CommandTargets.End)
                 {
                     programRunning = false;
+
                     IO.PrintEndMessage(parkings);
                 }
             }
